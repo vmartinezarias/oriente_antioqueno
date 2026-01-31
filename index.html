@@ -14,6 +14,9 @@
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
      crossorigin=""/>
 
+    <!-- Babel for on-the-fly compilation (Critical for simple GitHub Pages deployments) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
       /* Custom scrollbar for webkit */
       ::-webkit-scrollbar {
@@ -41,6 +44,17 @@
         height: 100%;
         margin: 0;
         padding: 0;
+        overflow: hidden;
+      }
+      #error-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255,255,255,0.95);
+        z-index: 9999;
+        padding: 2rem;
+        color: #ef4444;
+        font-family: monospace;
       }
     </style>
   <script type="importmap">
@@ -51,20 +65,51 @@
     "react": "https://esm.sh/react@18.2.0",
     "leaflet/": "https://esm.sh/leaflet@1.9.4/",
     "leaflet": "https://esm.sh/leaflet@1.9.4",
-    "react-leaflet": "https://esm.sh/react-leaflet@4.2.1",
+    "react-leaflet": "https://esm.sh/react-leaflet@4.2.1?external=react,react-dom,leaflet",
     "shpjs": "https://esm.sh/shpjs@6.2.0"
   }
 }
 </script>
 </head>
   <body class="bg-gray-50 text-slate-800 h-full">
+    <div id="error-overlay">
+        <h2 class="text-xl font-bold mb-2">Error de Aplicación</h2>
+        <pre id="error-message" class="whitespace-pre-wrap"></pre>
+    </div>
+
     <div id="root" class="h-full flex items-center justify-center">
       <div class="text-center animate-pulse">
         <h2 class="text-xl font-semibold text-slate-600">Cargando Visor...</h2>
         <p class="text-sm text-slate-400">Merceditas</p>
       </div>
     </div>
-    <!-- CRITICAL: Entry point for the React Application -->
-    <script type="module" src="./index.tsx"></script>
+
+    <script>
+        // Global error handler to show white-screen errors to the user
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            const overlay = document.getElementById('error-overlay');
+            const message = document.getElementById('error-message');
+            if (overlay && message) {
+                overlay.style.display = 'block';
+                message.textContent = `Error: ${msg}\nEn: ${url}:${lineNo}\n\n${error ? error.stack : ''}`;
+            }
+            return false;
+        };
+        // Catch unhandled promise rejections
+        window.onunhandledrejection = function(event) {
+            const overlay = document.getElementById('error-overlay');
+            const message = document.getElementById('error-message');
+             if (overlay && message) {
+                overlay.style.display = 'block';
+                message.textContent = `Promesa rechazada: ${event.reason}`;
+            }
+        };
+    </script>
+
+    <!-- 
+       CRITICAL: Use text/babel so Babel Standalone compiles TSX/JSX in the browser.
+       data-type="module" allows using imports.
+    -->
+    <script type="text/babel" data-type="module" data-presets="react,typescript" src="./index.tsx"></script>
   </body>
 </html>

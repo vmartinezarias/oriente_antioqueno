@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { GeoJSONCollection, GeoJSONFeature, ShapeFileProperties } from '../types';
@@ -9,13 +9,17 @@ import { SECTOR_DATA, DEFAULT_STYLE, HOVER_STYLE } from '../constants';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+// Explicitly setting the prototype options can sometimes fail in strict ESM, 
+// so we check if L.Marker is available.
+if (L && L.Marker && L.Marker.prototype && L.Marker.prototype.options) {
+    let DefaultIcon = L.icon({
+        iconUrl: icon,
+        shadowUrl: iconShadow,
+        iconSize: [25, 41],
+        iconAnchor: [12, 41]
+    });
+    L.Marker.prototype.options.icon = DefaultIcon;
+}
 
 interface MapViewProps {
   onFeatureSelect: (properties: ShapeFileProperties) => void;
@@ -25,9 +29,16 @@ interface MapViewProps {
 const FitBounds = ({ data }: { data: GeoJSONCollection }) => {
   const map = useMap();
   useEffect(() => {
-    if (data && data.features.length > 0) {
-      const geoJsonLayer = L.geoJSON(data);
-      map.fitBounds(geoJsonLayer.getBounds(), { padding: [50, 50] });
+    if (data && data.features && data.features.length > 0) {
+      try {
+        const geoJsonLayer = L.geoJSON(data);
+        const bounds = geoJsonLayer.getBounds();
+        if (bounds.isValid()) {
+             map.fitBounds(bounds, { padding: [50, 50] });
+        }
+      } catch (e) {
+        console.error("Error fitting bounds:", e);
+      }
     }
   }, [data, map]);
   return null;
@@ -41,11 +52,18 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const data = await loadShapefile();
-      if (data) {
-        setGeoData(data);
-      } else {
-        setError("No se pudo cargar el archivo 'AreaEstudio.zip'. Asegúrate de que esté en la raíz del repositorio.");
+      try {
+        const data = await loadShapefile();
+        if (data) {
+          setGeoData(data);
+        } else {
+          // This usually happens if the ZIP is missing or corrupt
+          console.warn("Shapefile loaded but returned null/empty.");
+          setError("No se pudo cargar 'AreaEstudio.zip'. Verifica que el archivo exista en la carpeta pública.");
+        }
+      } catch (e) {
+        console.error("Critical error loading shapefile:", e);
+        setError("Error crítico cargando el mapa: " + (e as Error).message);
       }
       setLoading(false);
     };
@@ -55,9 +73,6 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
   const styleFeature = (feature: any) => {
     const sectorKey = normalizeSectorName(feature.properties.Sector);
     const sectorInfo = SECTOR_DATA[sectorKey];
-    
-    // Check if this feature corresponds to the currently selected property (if we want to highlight all polygons of that sector)
-    // Or check specific identity if needed. Here we style by Sector Type.
     
     const isSelected = selectedFeature && normalizeSectorName(selectedFeature.Sector) === sectorKey;
     const isSpecificSelected = selectedFeature && selectedFeature === feature.properties;
@@ -75,7 +90,6 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
   const onEachFeature = (feature: GeoJSONFeature, layer: L.Layer) => {
     const sectorName = feature.properties.Sector;
     
-    // Add simple tooltip
     layer.bindTooltip(
         `<strong>${feature.properties.MPIO_CNBRE}</strong><br/>${sectorName}`,
         { sticky: true, direction: 'top' }
@@ -84,7 +98,6 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
     layer.on({
       click: () => {
         onFeatureSelect(feature.properties);
-        // We can manually style click here if we weren't using the declarative style prop
       },
       mouseover: (e) => {
         const l = e.target;
@@ -93,12 +106,6 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
       },
       mouseout: (e) => {
         const l = e.target;
-        // Reset style is handled by React Leaflet re-render usually, but for perf we can use resetStyle if we had access to the GeoJSON layer ref.
-        // For simplicity in this structure, we let the declarative style takes over on re-render or we can manually reset partial properties:
-        // However, declarative is cleaner. To force declarative update, we rely on parent state, but mouseout needs immediate feedback.
-        // Since we are inside the closure, we can't easily access the dynamic 'styleFeature' result without recalculating.
-        
-        // Quick fix: Re-apply base logic roughly or just light reset
         const sectorKey = normalizeSectorName(feature.properties.Sector);
         const sectorInfo = SECTOR_DATA[sectorKey];
         l.setStyle({
@@ -127,8 +134,7 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
           <h3 className="font-bold text-lg mb-2">Error de Carga</h3>
           <p>{error}</p>
           <p className="text-sm mt-4 text-slate-600">
-             Nota para el desarrollador: Sube un archivo llamado <code>AreaEstudio.zip</code> 
-             (que contenga .shp, .shx, .dbf) a la carpeta pública de GitHub.
+             Asegúrate de subir el archivo <code>AreaEstudio.zip</code> al repositorio.
           </p>
         </div>
       </div>
@@ -137,10 +143,11 @@ const MapView: React.FC<MapViewProps> = ({ onFeatureSelect, selectedFeature }) =
 
   return (
     <MapContainer 
-      center={[6.1, -75.3]} // Approximate center of Oriente Antioqueño
+      center={[6.1, -75.3]} 
       zoom={10} 
       className="w-full h-full"
-      zoomControl={false} // We will add it manually or let default be disabled for cleaner mobile look
+      zoomControl={false}
+      style={{ height: "100%", width: "100%", minHeight: "400px" }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
