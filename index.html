@@ -251,7 +251,6 @@
     <!-- LÓGICA DE LA APLICACIÓN -->
     <script>
         // --- CONFIGURACIÓN DE DATOS ---
-        // Aquí definimos los textos y colores para cada sector
         const SECTOR_DATA = {
             "Agua Viva": {
                 emoji: "🌊",
@@ -279,7 +278,6 @@
             }
         };
 
-        // Normalizar nombres para evitar errores por tildes o mayúsculas
         function getSectorInfo(name) {
             if (!name) return null;
             const n = name.toLowerCase();
@@ -287,29 +285,28 @@
             if (n.includes("bosques") || n.includes("sur")) return { key: "Bosques del Sur", ...SECTOR_DATA["Bosques del Sur"] };
             if (n.includes("granadino")) return { key: "Corredor Granadino", ...SECTOR_DATA["Corredor Granadino"] };
             if (n.includes("expansión") || n.includes("expansion")) return { key: "Núcleo de Expansión", ...SECTOR_DATA["Núcleo de Expansión"] };
-            return null; // Sector desconocido
+            return null;
         }
 
         // --- INICIALIZACIÓN DEL MAPA ---
         const map = L.map('map', { zoomControl: false }).setView([6.1, -75.3], 10);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // Capa Base (OpenStreetMap)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        let geoJsonLayer; // Referencia global a la capa GeoJSON
+        let geoJsonLayer; 
+        let globalGeoData = null; // Guardamos referencia global a los datos
 
         // --- CARGAR SHAPEFILE ---
-        // shpjs lee el archivo ZIP. Asegurate de que 'AreaEstudio.zip' está en la carpeta raiz.
         shp('./AreaEstudio.zip').then(function(geojson) {
             
-            // Ocultar Loader
             document.getElementById('loader').style.display = 'none';
 
-            // Manejo si el zip trae múltiples capas (array)
+            // Manejo si el zip trae múltiples capas
             const data = Array.isArray(geojson) ? geojson[0] : geojson;
+            globalGeoData = data; // Almacenar para cálculos posteriores
 
             // Añadir al mapa
             geoJsonLayer = L.geoJSON(data, {
@@ -317,7 +314,6 @@
                 onEachFeature: onEachFeature
             }).addTo(map);
 
-            // Ajustar zoom para ver todo
             map.fitBounds(geoJsonLayer.getBounds(), { padding: [50, 50] });
 
         }).catch(function(error) {
@@ -351,15 +347,14 @@
         function onEachFeature(feature, layer) {
             const props = feature.properties;
             
-            // Tooltip (Hover)
+            // Tooltip usando el nombre correcto de columna: MPIO_CNMBR
             layer.bindTooltip(`
                 <div style="text-align:center">
-                    <strong>${props.MPIO_CNBRE}</strong><br>
+                    <strong>${props.MPIO_CNMBR}</strong><br>
                     <span style="font-size:0.8em">${props.Sector}</span>
                 </div>
             `, { sticky: true });
 
-            // Eventos
             layer.on({
                 mouseover: (e) => {
                     if (selectedLayer !== e.target) {
@@ -377,12 +372,10 @@
         }
 
         function selectFeature(layer, props) {
-            // Resetear estilo anterior
             if (selectedLayer) {
                 geoJsonLayer.resetStyle(selectedLayer);
             }
 
-            // Marcar nuevo seleccionado
             selectedLayer = layer;
             selectedLayer.setStyle({
                 weight: 5,
@@ -391,23 +384,37 @@
                 dashArray: ''
             });
 
-            // Hacer zoom suave si es necesario (opcional)
-            // map.fitBounds(layer.getBounds());
+            // Lógica para sumar las áreas del municipio seleccionado
+            let totalArea = 0;
+            if (globalGeoData && globalGeoData.features) {
+                // Filtramos por el mismo nombre de municipio
+                const featuresMunicipio = globalGeoData.features.filter(f => f.properties.MPIO_CNMBR === props.MPIO_CNMBR);
+                // Sumamos Shape_Area
+                totalArea = featuresMunicipio.reduce((sum, f) => {
+                    const area = parseFloat(f.properties.Shape_Area) || 0;
+                    return sum + area;
+                }, 0);
+            } else {
+                // Fallback por si acaso
+                totalArea = parseFloat(props.Shape_Area) || 0;
+            }
 
-            updateSidebar(props);
+            updateSidebar(props, totalArea);
         }
 
         // --- PANEL LATERAL ---
-        function updateSidebar(props) {
+        function updateSidebar(props, totalArea) {
             const info = getSectorInfo(props.Sector);
             const container = document.getElementById('detail-content');
             
-            // Mostrar elementos de UI
             document.getElementById('sidebar-welcome').style.display = 'none';
             document.getElementById('sidebar-detail').style.display = 'block';
-            
-            // Activar sidebar en movil
             document.getElementById('sidebar').classList.add('active');
+
+            // Usamos MPIO_CNMBR para el título y el totalArea calculado
+            const areaDisplay = totalArea > 0 
+                ? Math.round(totalArea).toLocaleString() + ' m²' 
+                : 'No disponible';
 
             if (info) {
                 container.innerHTML = `
@@ -422,9 +429,9 @@
 
                     <div class="info-card">
                         <span class="info-label">Municipio Seleccionado</span>
-                        <div style="font-size: 1.2rem; font-weight: 600;">${props.MPIO_CNBRE}</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${props.MPIO_CNMBR}</div>
                         <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">
-                            Área: ${Math.round(props.Shape_Area || 0).toLocaleString()} m²
+                            Área Total: ${areaDisplay}
                         </div>
                     </div>
 
@@ -443,7 +450,8 @@
                     <h2>${props.Sector}</h2>
                     <p>Información detallada no disponible para este sector.</p>
                     <div class="info-card">
-                        <strong>Municipio:</strong> ${props.MPIO_CNBRE}
+                        <strong>Municipio:</strong> ${props.MPIO_CNMBR}<br>
+                        <strong>Área:</strong> ${areaDisplay}
                     </div>
                 `;
             }
@@ -451,7 +459,6 @@
 
         function closeSidebar() {
             document.getElementById('sidebar').classList.remove('active');
-            // Opcional: Deseleccionar en mapa
             if (selectedLayer) {
                 geoJsonLayer.resetStyle(selectedLayer);
                 selectedLayer = null;
