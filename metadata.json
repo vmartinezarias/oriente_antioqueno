@@ -1,0 +1,5 @@
+{
+  "name": "Visor Geográfico Oriente Antioqueño",
+  "description": "Visualización interactiva de sectores y municipios del Oriente Antioqueño basado en shapefiles.",
+  "requestFramePermissions": []
+}
