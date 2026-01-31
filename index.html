@@ -1,105 +1,462 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Oriente Antioqueño - Merceditas</title>
-    <meta name="description" content="Mapa interactivo de sectores estratégicos" />
-    
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-     crossorigin=""/>
-
-    <!-- Babel for on-the-fly compilation -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Fuentes -->
     <style>
-      ::-webkit-scrollbar { width: 8px; height: 8px; }
-      ::-webkit-scrollbar-track { background: #f1f1f1; }
-      ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: #555; }
-      
-      .leaflet-container {
-        width: 100%;
-        height: 100%;
-        background-color: #f8fafc;
-        z-index: 10;
-      }
-      
-      html, body, #root {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-      }
-      
-      #error-overlay {
-        display: none;
-        position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(255,255,255,0.98);
-        z-index: 9999;
-        padding: 2rem;
-        color: #ef4444;
-        font-family: monospace;
-        overflow: auto;
-      }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        :root {
+            --primary-color: #0f172a;
+            --accent-color: #3b82f6;
+            --sidebar-width: 400px;
+            --header-height: 70px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #334155;
+            background-color: #f1f5f9;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- HEADER --- */
+        header {
+            height: var(--header-height);
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex: 1;
+        }
+
+        .logo-img {
+            height: 50px;
+            width: auto;
+            object-fit: contain;
+        }
+
+        .header-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--primary-color);
+            line-height: 1.2;
+            max-width: 800px;
+        }
+
+        /* --- LAYOUT --- */
+        #main-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - var(--header-height));
+            position: relative;
+        }
+
+        /* --- SIDEBAR --- */
+        #sidebar {
+            width: var(--sidebar-width);
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+            position: relative;
+            z-index: 900;
+        }
+
+        .sidebar-content {
+            padding: 25px;
+        }
+
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+
+        .welcome-icon { font-size: 4rem; margin-bottom: 20px; }
+
+        /* Estilos de información del sector */
+        .sector-header { margin-bottom: 20px; }
+        .sector-badge { display: inline-block; padding: 5px 10px; border-radius: 20px; color: white; font-size: 0.8rem; font-weight: 600; margin-bottom: 10px; }
+        .sector-title { font-size: 1.8rem; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 10px; }
+        .sector-emoji { font-size: 2.5rem; }
+        
+        .info-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-label { font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 5px; display: block; }
+        .info-text { font-size: 0.95rem; line-height: 1.5; color: #334155; }
+        .info-description { font-size: 1rem; line-height: 1.6; color: #475569; text-align: justify; }
+
+        .close-sidebar-btn {
+            display: none; /* Solo visible en movil */
+            margin-bottom: 15px;
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 0.9rem;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* --- MAP --- */
+        #map {
+            flex: 1;
+            height: 100%;
+            background: #e2e8f0;
+            z-index: 1;
+        }
+
+        /* --- LOADING OVERLAY --- */
+        #loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 5px solid #e2e8f0;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- RESPONSIVE --- */
+        @media (max-width: 768px) {
+            header { padding: 0 10px; height: auto; padding: 10px; }
+            .logo-img { height: 40px; }
+            .header-title { font-size: 0.7rem; }
+            
+            #sidebar {
+                position: absolute;
+                top: 0; left: 0;
+                width: 100%;
+                height: 100%;
+                transform: translateX(100%); /* Oculto por defecto en móvil */
+            }
+            #sidebar.active {
+                transform: translateX(0);
+            }
+            .close-sidebar-btn { display: flex; }
+        }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "leaflet": "https://esm.sh/leaflet@1.9.4",
-    "react-leaflet": "https://esm.sh/react-leaflet@4.2.1?external=react,react-dom,leaflet",
-    "shpjs": "https://esm.sh/shpjs@6.2.0",
+    "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4",
+    "shpjs": "https://esm.sh/shpjs@^6.2.0",
     "leaflet/": "https://esm.sh/leaflet@^1.9.4/",
     "react/": "https://esm.sh/react@^19.2.4/"
   }
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-slate-800 h-full">
-    <div id="error-overlay">
-        <h2 class="text-xl font-bold mb-2">Error de Aplicación</h2>
-        <pre id="error-message" class="whitespace-pre-wrap"></pre>
-        <button onclick="window.location.reload()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Recargar Página</button>
+<body>
+
+    <!-- Pantalla de Carga -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <h3>Cargando Cartografía...</h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Leyendo archivo AreaEstudio.zip</p>
     </div>
 
-    <div id="root" class="h-full flex items-center justify-center">
-      <div class="text-center animate-pulse">
-        <h2 class="text-xl font-semibold text-slate-600">Cargando Visor...</h2>
-        <p class="text-sm text-slate-400">Merceditas</p>
-        <p class="text-xs text-slate-300 mt-2">Iniciando aplicación...</p>
-      </div>
+    <!-- Encabezado -->
+    <header>
+        <div class="logo-container">
+            <img src="./merceditas.png" alt="Merceditas Logo" class="logo-img" onerror="this.style.display='none'">
+            <h1 class="header-title">
+                Más allá de las alertas tempranas: descifrando el vínculo entre los focos de deforestación y las dinámicas del paisaje para mejorar las estrategias de conservación de la biodiversidad en el oriente Antioqueño
+            </h1>
+        </div>
+    </header>
+
+    <!-- Contenedor Principal -->
+    <div id="main-container">
+        <!-- Panel Lateral -->
+        <aside id="sidebar">
+            <div id="sidebar-welcome" class="welcome-screen">
+                <div class="welcome-icon">🗺️</div>
+                <h2>Explora el Territorio</h2>
+                <p>Haz clic en cualquier zona coloreada del mapa para ver el detalle del sector y los municipios.</p>
+            </div>
+            
+            <div id="sidebar-detail" class="sidebar-content" style="display: none;">
+                <button class="close-sidebar-btn" onclick="closeSidebar()">← Volver al mapa</button>
+                <div id="detail-content">
+                    <!-- El contenido se inyecta aquí con JS -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Mapa -->
+        <div id="map"></div>
     </div>
 
+    <!-- LIBRERIAS JAVASCRIPT -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- shpjs: Para leer Zips y Shapefiles -->
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+
+    <!-- LÓGICA DE LA APLICACIÓN -->
     <script>
-        window.onerror = function(msg, url, lineNo, columnNo, error) {
-            const overlay = document.getElementById('error-overlay');
-            const message = document.getElementById('error-message');
-            if (overlay && message) {
-                overlay.style.display = 'block';
-                message.textContent = `Error: ${msg}\nArchivo: ${url}\nLínea: ${lineNo}\n\n${error ? error.stack : ''}`;
+        // --- CONFIGURACIÓN DE DATOS ---
+        // Aquí definimos los textos y colores para cada sector
+        const SECTOR_DATA = {
+            "Agua Viva": {
+                emoji: "🌊",
+                color: "#0ea5e9", // Azul
+                municipios: "Alejandría, Concepción, San Vicente Ferrer, San Rafael, Peñol, Guatapé",
+                descripcion: `El sector Agua Viva corresponde a una subregión estratégica del Oriente Antioqueño caracterizada por su alta importancia hídrica, asociada a sistemas de embalses, cuencas abastecedoras y zonas de regulación ecosistémica. Este sector cumple un rol fundamental en la provisión de servicios ecosistémicos relacionados con el recurso hídrico, tanto a escala regional como metropolitana.`
+            },
+            "Bosques del Sur": {
+                emoji: "🌳",
+                color: "#16a34a", // Verde
+                municipios: "Sonsón, El Carmen de Viboral, San Francisco, Nariño",
+                descripcion: `El sector Bosques del Sur agrupa municipios que conservan extensas áreas de cobertura boscosa y ecosistemas estratégicos de montaña, fundamentales para la conectividad ecológica entre el Oriente Antioqueño y otras regiones del departamento. Esta subárea presenta una alta diversidad biológica y cumple funciones clave como refugio de fauna.`
+            },
+            "Corredor Granadino": {
+                emoji: "🌿",
+                color: "#84cc16", // Lima
+                municipios: "Cocorná, San Luis, San Carlos, Granada",
+                descripcion: `El Corredor Granadino constituye una franja de conexión ecológica clave dentro del Oriente Antioqueño, articulando ecosistemas de bosque, zonas agrícolas y áreas de transición entre regiones. Su ubicación estratégica lo convierte en un eje fundamental para la movilidad de especies y el flujo de procesos ecológicos a escala regional.`
+            },
+            "Núcleo de Expansión": {
+                emoji: "🏙️",
+                color: "#f59e0b", // Ámbar
+                municipios: "Argelia, Abejorral, El Santuario, Rionegro, Retiro, Marinilla, La Unión, La Ceja",
+                descripcion: `El sector Núcleo de Expansión se caracteriza por una dinámica acelerada de crecimiento urbano, transformación del suelo y consolidación de infraestructuras. Este proceso genera una presión constante sobre la cobertura vegetal remanente y sobre las áreas que funcionan como nodos de conectividad ecológica.`
             }
-            return false;
         };
-        window.onunhandledrejection = function(event) {
-            const overlay = document.getElementById('error-overlay');
-            const message = document.getElementById('error-message');
-             if (overlay && message) {
-                overlay.style.display = 'block';
-                message.textContent = `Promesa rechazada: ${event.reason}`;
-            }
-        };
-    </script>
 
-    <!-- Main Logic -->
-    <script type="text/babel" data-type="module" data-presets="react,typescript" src="./index.tsx"></script>
-  </body>
+        // Normalizar nombres para evitar errores por tildes o mayúsculas
+        function getSectorInfo(name) {
+            if (!name) return null;
+            const n = name.toLowerCase();
+            if (n.includes("agua viva")) return { key: "Agua Viva", ...SECTOR_DATA["Agua Viva"] };
+            if (n.includes("bosques") || n.includes("sur")) return { key: "Bosques del Sur", ...SECTOR_DATA["Bosques del Sur"] };
+            if (n.includes("granadino")) return { key: "Corredor Granadino", ...SECTOR_DATA["Corredor Granadino"] };
+            if (n.includes("expansión") || n.includes("expansion")) return { key: "Núcleo de Expansión", ...SECTOR_DATA["Núcleo de Expansión"] };
+            return null; // Sector desconocido
+        }
+
+        // --- INICIALIZACIÓN DEL MAPA ---
+        const map = L.map('map', { zoomControl: false }).setView([6.1, -75.3], 10);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // Capa Base (OpenStreetMap)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let geoJsonLayer; // Referencia global a la capa GeoJSON
+
+        // --- CARGAR SHAPEFILE ---
+        // shpjs lee el archivo ZIP. Asegurate de que 'AreaEstudio.zip' está en la carpeta raiz.
+        shp('./AreaEstudio.zip').then(function(geojson) {
+            
+            // Ocultar Loader
+            document.getElementById('loader').style.display = 'none';
+
+            // Manejo si el zip trae múltiples capas (array)
+            const data = Array.isArray(geojson) ? geojson[0] : geojson;
+
+            // Añadir al mapa
+            geoJsonLayer = L.geoJSON(data, {
+                style: styleFeature,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+
+            // Ajustar zoom para ver todo
+            map.fitBounds(geoJsonLayer.getBounds(), { padding: [50, 50] });
+
+        }).catch(function(error) {
+            console.error(error);
+            document.getElementById('loader').innerHTML = `
+                <h3 style="color: #ef4444">Error al cargar el mapa</h3>
+                <p>No se encontró <code>AreaEstudio.zip</code> o el archivo es inválido.</p>
+                <p style="font-size:0.8rem">Detalle: ${error.message}</p>
+            `;
+        });
+
+        // --- ESTILOS DEL MAPA ---
+        function styleFeature(feature) {
+            const sectorName = feature.properties.Sector;
+            const info = getSectorInfo(sectorName);
+            const color = info ? info.color : '#94a3b8';
+
+            return {
+                fillColor: color,
+                weight: 2,
+                opacity: 1,
+                color: 'white',
+                dashArray: '3',
+                fillOpacity: 0.5
+            };
+        }
+
+        // --- INTERACCIÓN ---
+        let selectedLayer = null;
+
+        function onEachFeature(feature, layer) {
+            const props = feature.properties;
+            
+            // Tooltip (Hover)
+            layer.bindTooltip(`
+                <div style="text-align:center">
+                    <strong>${props.MPIO_CNBRE}</strong><br>
+                    <span style="font-size:0.8em">${props.Sector}</span>
+                </div>
+            `, { sticky: true });
+
+            // Eventos
+            layer.on({
+                mouseover: (e) => {
+                    if (selectedLayer !== e.target) {
+                        e.target.setStyle({ weight: 4, color: '#666', fillOpacity: 0.7 });
+                        e.target.bringToFront();
+                    }
+                },
+                mouseout: (e) => {
+                    if (selectedLayer !== e.target) {
+                        geoJsonLayer.resetStyle(e.target);
+                    }
+                },
+                click: (e) => selectFeature(e.target, props)
+            });
+        }
+
+        function selectFeature(layer, props) {
+            // Resetear estilo anterior
+            if (selectedLayer) {
+                geoJsonLayer.resetStyle(selectedLayer);
+            }
+
+            // Marcar nuevo seleccionado
+            selectedLayer = layer;
+            selectedLayer.setStyle({
+                weight: 5,
+                color: '#333',
+                fillOpacity: 0.8,
+                dashArray: ''
+            });
+
+            // Hacer zoom suave si es necesario (opcional)
+            // map.fitBounds(layer.getBounds());
+
+            updateSidebar(props);
+        }
+
+        // --- PANEL LATERAL ---
+        function updateSidebar(props) {
+            const info = getSectorInfo(props.Sector);
+            const container = document.getElementById('detail-content');
+            
+            // Mostrar elementos de UI
+            document.getElementById('sidebar-welcome').style.display = 'none';
+            document.getElementById('sidebar-detail').style.display = 'block';
+            
+            // Activar sidebar en movil
+            document.getElementById('sidebar').classList.add('active');
+
+            if (info) {
+                container.innerHTML = `
+                    <div style="width: 100%; height: 8px; background: ${info.color}; border-radius: 4px; margin-bottom: 20px;"></div>
+                    
+                    <div class="sector-header">
+                        <div class="sector-title">
+                            <span class="sector-emoji">${info.emoji}</span>
+                            ${info.key}
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <span class="info-label">Municipio Seleccionado</span>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${props.MPIO_CNBRE}</div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">
+                            Área: ${Math.round(props.Shape_Area || 0).toLocaleString()} m²
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <span class="info-label">Municipios del Sector</span>
+                        <p class="info-text">${info.municipios}</p>
+                    </div>
+
+                    <div>
+                        <span class="info-label">Descripción del Territorio</span>
+                        <p class="info-description">${info.descripcion}</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <h2>${props.Sector}</h2>
+                    <p>Información detallada no disponible para este sector.</p>
+                    <div class="info-card">
+                        <strong>Municipio:</strong> ${props.MPIO_CNBRE}
+                    </div>
+                `;
+            }
+        }
+
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('active');
+            // Opcional: Deseleccionar en mapa
+            if (selectedLayer) {
+                geoJsonLayer.resetStyle(selectedLayer);
+                selectedLayer = null;
+            }
+        }
+    </script>
+</body>
 </html>
